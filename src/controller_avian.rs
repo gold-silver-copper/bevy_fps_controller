@@ -82,7 +82,7 @@ pub struct FpsController {
     /// If the distance to the ground is less than this value, the player is considered grounded
     pub grounded_distance: f32,
     pub walk_speed: f32,
-    pub run_speed: f32,
+
     pub forward_speed: f32,
     pub side_speed: f32,
     pub air_speed_cap: f32,
@@ -96,9 +96,7 @@ pub struct FpsController {
     pub friction_speed_cutoff: f32,
     pub jump_speed: f32,
     pub fly_speed: f32,
-    pub crouched_speed: f32,
-    pub crouch_speed: f32,
-    pub uncrouch_speed: f32,
+
     pub height: f32,
     pub upright_height: f32,
     pub crouch_height: f32,
@@ -110,7 +108,7 @@ pub struct FpsController {
     pub stop_speed: f32,
     pub sensitivity: f32,
     pub enable_input: bool,
-    pub experimental_step_offset: f32,
+
     pub key_forward: KeyCode,
     pub key_back: KeyCode,
     pub key_left: KeyCode,
@@ -119,8 +117,6 @@ pub struct FpsController {
     pub key_down: KeyCode,
     pub key_sprint: KeyCode,
     pub key_jump: KeyCode,
-    pub key_fly: KeyCode,
-    pub key_crouch: KeyCode,
 }
 
 impl Default for FpsController {
@@ -132,15 +128,13 @@ impl Default for FpsController {
             fast_fly_speed: 30.0,
             gravity: 23.0,
             walk_speed: 9.0,
-            run_speed: 14.0,
+
             forward_speed: 30.0,
             side_speed: 30.0,
             air_speed_cap: 2.0,
             air_acceleration: 20.0,
             max_air_speed: 15.0,
-            crouched_speed: 5.0,
-            crouch_speed: 6.0,
-            uncrouch_speed: 8.0,
+
             height: 3.0,
             upright_height: 3.0,
             crouch_height: 1.5,
@@ -154,7 +148,7 @@ impl Default for FpsController {
             ground_tick: 0,
             stop_speed: 1.0,
             jump_speed: 8.5,
-            experimental_step_offset: 0.0, // Does not work well on Avian yet.
+
             enable_input: true,
             key_forward: KeyCode::KeyW,
             key_back: KeyCode::KeyS,
@@ -164,8 +158,7 @@ impl Default for FpsController {
             key_down: KeyCode::KeyE,
             key_sprint: KeyCode::ShiftLeft,
             key_jump: KeyCode::Space,
-            key_fly: KeyCode::KeyF,
-            key_crouch: KeyCode::ControlLeft,
+
             sensitivity: 0.001,
         }
     }
@@ -212,8 +205,6 @@ pub fn fps_controller_input(
         );
         input.sprint = key_input.pressed(controller.key_sprint);
         input.jump = key_input.pressed(controller.key_jump);
-        input.fly = key_input.just_pressed(controller.key_fly);
-        input.crouch = key_input.pressed(controller.key_crouch);
     }
 }
 
@@ -253,13 +244,7 @@ pub fn fps_controller_move(
             // Avoid division by zero
             wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
         }
-        let max_speed = if input.crouch {
-            controller.crouched_speed
-        } else if input.sprint {
-            controller.run_speed
-        } else {
-            controller.walk_speed
-        };
+        let max_speed = controller.walk_speed;
         wish_speed = f32::min(wish_speed, max_speed);
 
         // Shape cast downwards to find ground
@@ -339,59 +324,6 @@ pub fn fps_controller_move(
                 velocity.0.z *= ratio;
             }
         };
-
-        /* Crouching */
-
-        let crouch_height = controller.crouch_height;
-        let upright_height = controller.upright_height;
-
-        let crouch_speed = if input.crouch {
-            -controller.crouch_speed
-        } else {
-            controller.uncrouch_speed
-        };
-        controller.height += dt * crouch_speed;
-        controller.height = controller.height.clamp(crouch_height, upright_height);
-
-        if let Some(capsule) = collider.shape().as_capsule() {
-            let radius = capsule.radius;
-            let half = Point::from(Vec3::Y * (controller.height * 0.5 - radius));
-            collider.set_shape(SharedShape::capsule(-half, half, radius));
-        } else if let Some(cylinder) = collider.shape().as_cylinder() {
-            let radius = cylinder.radius;
-            collider.set_shape(SharedShape::cylinder(controller.height * 0.5, radius));
-        } else {
-            panic!("Controller must use a cylinder or capsule collider")
-        }
-
-        // Step offset really only works best for cylinders
-        // For capsules the player has to practically teleported to fully step up
-        if collider.shape().as_cylinder().is_some()
-            && controller.experimental_step_offset > f32::EPSILON
-            && controller.ground_tick >= 1
-        {
-            // Try putting the player forward, but instead lifted upward by the step offset
-            // If we can find a surface below us, we can adjust our position to be on top of it
-            let future_position = transform.translation + velocity.0 * dt;
-            let future_position_lifted =
-                future_position + Vec3::Y * controller.experimental_step_offset;
-            if let Some(hit) = spatial_query_pipeline.cast_shape(
-                &collider,
-                future_position_lifted,
-                transform.rotation,
-                Dir3::new_unchecked(-Vec3::Y),
-                &ShapeCastConfig::from_max_distance(
-                    controller.experimental_step_offset * SLIGHT_SCALE_DOWN,
-                ),
-                &filter,
-            ) {
-                let has_traction_on_ledge =
-                    Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
-                if has_traction_on_ledge {
-                    transform.translation.y += controller.experimental_step_offset - hit.distance;
-                }
-            }
-        }
     }
 }
 
