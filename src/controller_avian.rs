@@ -51,12 +51,6 @@ impl Plugin for FpsControllerPlugin {
     }
 }
 
-#[derive(PartialEq)]
-pub enum MoveMode {
-    Noclip,
-    Ground,
-}
-
 #[derive(Component)]
 pub struct LogicalPlayer;
 
@@ -83,7 +77,6 @@ pub struct FpsControllerInput {
 
 #[derive(Component)]
 pub struct FpsController {
-    pub move_mode: MoveMode,
     pub radius: f32,
     pub gravity: f32,
     /// If the distance to the ground is less than this value, the player is considered grounded
@@ -134,7 +127,6 @@ pub struct FpsController {
 impl Default for FpsController {
     fn default() -> Self {
         Self {
-            move_mode: MoveMode::Ground,
             grounded_distance: 0.125,
             radius: 0.5,
             fly_speed: 10.0,
@@ -254,220 +246,187 @@ pub fn fps_controller_move(
     for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
         query.iter_mut()
     {
-        if input.fly {
-            controller.move_mode = match controller.move_mode {
-                MoveMode::Noclip => MoveMode::Ground,
-                MoveMode::Ground => MoveMode::Noclip,
+        let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
+        let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
+        move_to_world.z_axis *= -1.0; // Forward is -Z
+        let mut wish_direction = move_to_world * (input.movement * speeds);
+        let mut wish_speed = wish_direction.length();
+        if wish_speed > f32::EPSILON {
+            // Avoid division by zero
+            wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
+        }
+        let max_speed = if input.crouch {
+            controller.crouched_speed
+        } else if input.sprint {
+            controller.run_speed
+        } else {
+            controller.walk_speed
+        };
+        wish_speed = f32::min(wish_speed, max_speed);
+
+        // Shape cast downwards to find ground
+        // Better than a ray cast as it handles when you are near the edge of a surface
+        let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
+        if let Some(hit) = spatial_query_pipeline.cast_shape(
+            // Consider when the controller is right up against a wall
+            // We do not want the shape cast to detect it,
+            // so provide a slightly smaller collider in the XZ plane
+            &scaled_collider_laterally(&collider, SLIGHT_SCALE_DOWN),
+            transform.translation,
+            transform.rotation,
+            -Dir3::Y,
+            &ShapeCastConfig::from_max_distance(controller.grounded_distance),
+            &filter,
+        ) {
+            let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+
+            // Only apply friction after at least one tick, allows b-hopping without losing speed
+            if controller.ground_tick >= 1 && has_traction {
+                let lateral_speed = velocity.0.xz().length();
+                if lateral_speed > controller.friction_speed_cutoff {
+                    let control = f32::max(lateral_speed, controller.stop_speed);
+                    let drop = control * controller.friction * dt;
+                    let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
+                    velocity.0.x *= new_speed;
+                    velocity.0.z *= new_speed;
+                } else {
+                    velocity.0 = Vec3::ZERO;
+                }
+                if controller.ground_tick == 1 {
+                    velocity.0.y = -hit.distance;
+                }
+            }
+
+            let mut add = acceleration(
+                wish_direction,
+                wish_speed,
+                controller.acceleration,
+                velocity.0,
+                dt,
+            );
+            if !has_traction {
+                add.y -= controller.gravity * dt;
+            }
+            velocity.0 += add;
+
+            if has_traction {
+                let linear_velocity = velocity.0;
+                velocity.0 -= Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
+
+                if input.jump {
+                    velocity.0.y = controller.jump_speed;
+                }
+            }
+
+            // Increment ground tick but cap at max value
+            controller.ground_tick = controller.ground_tick.saturating_add(1);
+        } else {
+            controller.ground_tick = 0;
+            wish_speed = f32::min(wish_speed, controller.air_speed_cap);
+
+            let mut add = acceleration(
+                wish_direction,
+                wish_speed,
+                controller.air_acceleration,
+                velocity.0,
+                dt,
+            );
+            add.y = -controller.gravity * dt;
+            velocity.0 += add;
+
+            let air_speed = velocity.xz().length();
+            if air_speed > controller.max_air_speed {
+                let ratio = controller.max_air_speed / air_speed;
+                velocity.0.x *= ratio;
+                velocity.0.z *= ratio;
+            }
+        };
+
+        /* Crouching */
+
+        let crouch_height = controller.crouch_height;
+        let upright_height = controller.upright_height;
+
+        let crouch_speed = if input.crouch {
+            -controller.crouch_speed
+        } else {
+            controller.uncrouch_speed
+        };
+        controller.height += dt * crouch_speed;
+        controller.height = controller.height.clamp(crouch_height, upright_height);
+
+        if let Some(capsule) = collider.shape().as_capsule() {
+            let radius = capsule.radius;
+            let half = Point::from(Vec3::Y * (controller.height * 0.5 - radius));
+            collider.set_shape(SharedShape::capsule(-half, half, radius));
+        } else if let Some(cylinder) = collider.shape().as_cylinder() {
+            let radius = cylinder.radius;
+            collider.set_shape(SharedShape::cylinder(controller.height * 0.5, radius));
+        } else {
+            panic!("Controller must use a cylinder or capsule collider")
+        }
+
+        // Step offset really only works best for cylinders
+        // For capsules the player has to practically teleported to fully step up
+        if collider.shape().as_cylinder().is_some()
+            && controller.experimental_step_offset > f32::EPSILON
+            && controller.ground_tick >= 1
+        {
+            // Try putting the player forward, but instead lifted upward by the step offset
+            // If we can find a surface below us, we can adjust our position to be on top of it
+            let future_position = transform.translation + velocity.0 * dt;
+            let future_position_lifted =
+                future_position + Vec3::Y * controller.experimental_step_offset;
+            if let Some(hit) = spatial_query_pipeline.cast_shape(
+                &collider,
+                future_position_lifted,
+                transform.rotation,
+                Dir3::new_unchecked(-Vec3::Y),
+                &ShapeCastConfig::from_max_distance(
+                    controller.experimental_step_offset * SLIGHT_SCALE_DOWN,
+                ),
+                &filter,
+            ) {
+                let has_traction_on_ledge =
+                    Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+                if has_traction_on_ledge {
+                    transform.translation.y += controller.experimental_step_offset - hit.distance;
+                }
             }
         }
 
-        match controller.move_mode {
-            MoveMode::Noclip => {
-                if input.movement == Vec3::ZERO {
-                    let friction = controller.fly_friction.clamp(0.0, 1.0);
-                    velocity.0 *= 1.0 - friction;
-                    if velocity.length_squared() < f32::EPSILON {
-                        velocity.0 = Vec3::ZERO;
-                    }
-                } else {
-                    let fly_speed = if input.sprint {
-                        controller.fast_fly_speed
-                    } else {
-                        controller.fly_speed
-                    };
-                    let mut move_to_world =
-                        Mat3::from_euler(EulerRot::YXZ, input.yaw, input.pitch, 0.0);
-                    move_to_world.z_axis *= -1.0; // Forward is -Z
-                    move_to_world.y_axis = Vec3::Y; // Vertical movement aligned with world up
-                    velocity.0 = move_to_world * input.movement * fly_speed;
+        // Prevent falling off ledges
+        if controller.experimental_enable_ledge_cling
+            && controller.ground_tick >= 1
+            && input.crouch
+            && !input.jump
+        {
+            for _ in 0..2 {
+                // Find the component of our velocity that is overhanging and subtract it off
+                let overhang = overhang_component(
+                    entity,
+                    &collider,
+                    transform.as_ref(),
+                    &spatial_query_pipeline,
+                    velocity.0,
+                    dt,
+                );
+                if let Some(overhang) = overhang {
+                    velocity.0 -= overhang;
                 }
             }
-            MoveMode::Ground => {
-                let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
-                let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
-                move_to_world.z_axis *= -1.0; // Forward is -Z
-                let mut wish_direction = move_to_world * (input.movement * speeds);
-                let mut wish_speed = wish_direction.length();
-                if wish_speed > f32::EPSILON {
-                    // Avoid division by zero
-                    wish_direction /= wish_speed; // Effectively normalize, avoid length computation twice
-                }
-                let max_speed = if input.crouch {
-                    controller.crouched_speed
-                } else if input.sprint {
-                    controller.run_speed
-                } else {
-                    controller.walk_speed
-                };
-                wish_speed = f32::min(wish_speed, max_speed);
-
-                // Shape cast downwards to find ground
-                // Better than a ray cast as it handles when you are near the edge of a surface
-                let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
-                if let Some(hit) = spatial_query_pipeline.cast_shape(
-                    // Consider when the controller is right up against a wall
-                    // We do not want the shape cast to detect it,
-                    // so provide a slightly smaller collider in the XZ plane
-                    &scaled_collider_laterally(&collider, SLIGHT_SCALE_DOWN),
-                    transform.translation,
-                    transform.rotation,
-                    -Dir3::Y,
-                    &ShapeCastConfig::from_max_distance(controller.grounded_distance),
-                    &filter,
-                ) {
-                    let has_traction =
-                        Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
-
-                    // Only apply friction after at least one tick, allows b-hopping without losing speed
-                    if controller.ground_tick >= 1 && has_traction {
-                        let lateral_speed = velocity.0.xz().length();
-                        if lateral_speed > controller.friction_speed_cutoff {
-                            let control = f32::max(lateral_speed, controller.stop_speed);
-                            let drop = control * controller.friction * dt;
-                            let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
-                            velocity.0.x *= new_speed;
-                            velocity.0.z *= new_speed;
-                        } else {
-                            velocity.0 = Vec3::ZERO;
-                        }
-                        if controller.ground_tick == 1 {
-                            velocity.0.y = -hit.distance;
-                        }
-                    }
-
-                    let mut add = acceleration(
-                        wish_direction,
-                        wish_speed,
-                        controller.acceleration,
-                        velocity.0,
-                        dt,
-                    );
-                    if !has_traction {
-                        add.y -= controller.gravity * dt;
-                    }
-                    velocity.0 += add;
-
-                    if has_traction {
-                        let linear_velocity = velocity.0;
-                        velocity.0 -= Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
-
-                        if input.jump {
-                            velocity.0.y = controller.jump_speed;
-                        }
-                    }
-
-                    // Increment ground tick but cap at max value
-                    controller.ground_tick = controller.ground_tick.saturating_add(1);
-                } else {
-                    controller.ground_tick = 0;
-                    wish_speed = f32::min(wish_speed, controller.air_speed_cap);
-
-                    let mut add = acceleration(
-                        wish_direction,
-                        wish_speed,
-                        controller.air_acceleration,
-                        velocity.0,
-                        dt,
-                    );
-                    add.y = -controller.gravity * dt;
-                    velocity.0 += add;
-
-                    let air_speed = velocity.xz().length();
-                    if air_speed > controller.max_air_speed {
-                        let ratio = controller.max_air_speed / air_speed;
-                        velocity.0.x *= ratio;
-                        velocity.0.z *= ratio;
-                    }
-                };
-
-                /* Crouching */
-
-                let crouch_height = controller.crouch_height;
-                let upright_height = controller.upright_height;
-
-                let crouch_speed = if input.crouch {
-                    -controller.crouch_speed
-                } else {
-                    controller.uncrouch_speed
-                };
-                controller.height += dt * crouch_speed;
-                controller.height = controller.height.clamp(crouch_height, upright_height);
-
-                if let Some(capsule) = collider.shape().as_capsule() {
-                    let radius = capsule.radius;
-                    let half = Point::from(Vec3::Y * (controller.height * 0.5 - radius));
-                    collider.set_shape(SharedShape::capsule(-half, half, radius));
-                } else if let Some(cylinder) = collider.shape().as_cylinder() {
-                    let radius = cylinder.radius;
-                    collider.set_shape(SharedShape::cylinder(controller.height * 0.5, radius));
-                } else {
-                    panic!("Controller must use a cylinder or capsule collider")
-                }
-
-                // Step offset really only works best for cylinders
-                // For capsules the player has to practically teleported to fully step up
-                if collider.shape().as_cylinder().is_some()
-                    && controller.experimental_step_offset > f32::EPSILON
-                    && controller.ground_tick >= 1
-                {
-                    // Try putting the player forward, but instead lifted upward by the step offset
-                    // If we can find a surface below us, we can adjust our position to be on top of it
-                    let future_position = transform.translation + velocity.0 * dt;
-                    let future_position_lifted =
-                        future_position + Vec3::Y * controller.experimental_step_offset;
-                    if let Some(hit) = spatial_query_pipeline.cast_shape(
-                        &collider,
-                        future_position_lifted,
-                        transform.rotation,
-                        Dir3::new_unchecked(-Vec3::Y),
-                        &ShapeCastConfig::from_max_distance(
-                            controller.experimental_step_offset * SLIGHT_SCALE_DOWN,
-                        ),
-                        &filter,
-                    ) {
-                        let has_traction_on_ledge =
-                            Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
-                        if has_traction_on_ledge {
-                            transform.translation.y +=
-                                controller.experimental_step_offset - hit.distance;
-                        }
-                    }
-                }
-
-                // Prevent falling off ledges
-                if controller.experimental_enable_ledge_cling
-                    && controller.ground_tick >= 1
-                    && input.crouch
-                    && !input.jump
-                {
-                    for _ in 0..2 {
-                        // Find the component of our velocity that is overhanging and subtract it off
-                        let overhang = overhang_component(
-                            entity,
-                            &collider,
-                            transform.as_ref(),
-                            &spatial_query_pipeline,
-                            velocity.0,
-                            dt,
-                        );
-                        if let Some(overhang) = overhang {
-                            velocity.0 -= overhang;
-                        }
-                    }
-                    // If we are still overhanging consider unsolvable and freeze
-                    if overhang_component(
-                        entity,
-                        &collider,
-                        transform.as_ref(),
-                        &spatial_query_pipeline,
-                        velocity.0,
-                        dt,
-                    )
-                    .is_some()
-                    {
-                        velocity.0 = Vec3::ZERO;
-                    }
-                }
+            // If we are still overhanging consider unsolvable and freeze
+            if overhang_component(
+                entity,
+                &collider,
+                transform.as_ref(),
+                &spatial_query_pipeline,
+                velocity.0,
+                dt,
+            )
+            .is_some()
+            {
+                velocity.0 = Vec3::ZERO;
             }
         }
     }
