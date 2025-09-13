@@ -147,7 +147,6 @@ fn scene_colliders(
     gltf_assets: Res<Assets<Gltf>>,
     gltf_mesh_assets: Res<Assets<GltfMesh>>,
     gltf_node_assets: Res<Assets<GltfNode>>,
-    mesh_assets: Res<Assets<Mesh>>,
 ) {
     if main_scene.is_loaded {
         return;
@@ -163,13 +162,11 @@ fn scene_colliders(
             if let Some(gltf_mesh) = node.mesh.clone() {
                 let gltf_mesh = gltf_mesh_assets.get(&gltf_mesh).unwrap();
                 for mesh_primitive in &gltf_mesh.primitives {
-                    let mesh = mesh_assets.get(&mesh_primitive.mesh).unwrap();
                     commands.spawn((
                         ColliderConstructor::TrimeshFromMeshWithConfig(
                             TrimeshFlags::FIX_INTERNAL_EDGES,
                         ),
                         Mesh3d(mesh_primitive.mesh.clone()),
-                        //   Collider::trimesh_from_mesh(mesh).unwrap(),
                         RigidBody::Static,
                         node.transform,
                     ));
