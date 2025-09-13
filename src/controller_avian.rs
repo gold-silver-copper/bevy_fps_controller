@@ -100,8 +100,7 @@ pub struct FpsController {
     pub height: f32,
     pub upright_height: f32,
     pub crouch_height: f32,
-    pub fast_fly_speed: f32,
-    pub fly_friction: f32,
+
     pub pitch: f32,
     pub yaw: f32,
     pub ground_tick: u8,
@@ -115,7 +114,7 @@ pub struct FpsController {
     pub key_right: KeyCode,
     pub key_up: KeyCode,
     pub key_down: KeyCode,
-    pub key_sprint: KeyCode,
+
     pub key_jump: KeyCode,
 }
 
@@ -125,7 +124,7 @@ impl Default for FpsController {
             grounded_distance: 0.125,
             radius: 0.5,
             fly_speed: 10.0,
-            fast_fly_speed: 30.0,
+
             gravity: 23.0,
             walk_speed: 9.0,
 
@@ -142,7 +141,7 @@ impl Default for FpsController {
             friction: 10.0,
             traction_normal_cutoff: 0.7,
             friction_speed_cutoff: 0.1,
-            fly_friction: 0.5,
+
             pitch: 0.0,
             yaw: 0.0,
             ground_tick: 0,
@@ -156,7 +155,7 @@ impl Default for FpsController {
             key_right: KeyCode::KeyD,
             key_up: KeyCode::KeyQ,
             key_down: KeyCode::KeyE,
-            key_sprint: KeyCode::ShiftLeft,
+
             key_jump: KeyCode::Space,
 
             sensitivity: 0.001,
@@ -203,7 +202,7 @@ pub fn fps_controller_input(
             get_axis(&key_input, controller.key_up, controller.key_down),
             get_axis(&key_input, controller.key_forward, controller.key_back),
         );
-        input.sprint = key_input.pressed(controller.key_sprint);
+
         input.jump = key_input.pressed(controller.key_jump);
     }
 }
