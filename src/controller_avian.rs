@@ -121,7 +121,6 @@ pub struct FpsController {
     pub key_jump: KeyCode,
     pub key_fly: KeyCode,
     pub key_crouch: KeyCode,
-    pub experimental_enable_ledge_cling: bool,
 }
 
 impl Default for FpsController {
@@ -168,7 +167,6 @@ impl Default for FpsController {
             key_fly: KeyCode::KeyF,
             key_crouch: KeyCode::ControlLeft,
             sensitivity: 0.001,
-            experimental_enable_ledge_cling: false, // Does not work well on Avian yet.
         }
     }
 }
@@ -392,41 +390,6 @@ pub fn fps_controller_move(
                 if has_traction_on_ledge {
                     transform.translation.y += controller.experimental_step_offset - hit.distance;
                 }
-            }
-        }
-
-        // Prevent falling off ledges
-        if controller.experimental_enable_ledge_cling
-            && controller.ground_tick >= 1
-            && input.crouch
-            && !input.jump
-        {
-            for _ in 0..2 {
-                // Find the component of our velocity that is overhanging and subtract it off
-                let overhang = overhang_component(
-                    entity,
-                    &collider,
-                    transform.as_ref(),
-                    &spatial_query_pipeline,
-                    velocity.0,
-                    dt,
-                );
-                if let Some(overhang) = overhang {
-                    velocity.0 -= overhang;
-                }
-            }
-            // If we are still overhanging consider unsolvable and freeze
-            if overhang_component(
-                entity,
-                &collider,
-                transform.as_ref(),
-                &spatial_query_pipeline,
-                velocity.0,
-                dt,
-            )
-            .is_some()
-            {
-                velocity.0 = Vec3::ZERO;
             }
         }
     }
