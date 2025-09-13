@@ -11,20 +11,5 @@ description = "Bevy plugin that adds a Source engine inspired FPS movement contr
 
 [dependencies]
 bevy = "0.16"
-bevy_rapier3d = { version = "0.31", optional = true }
-avian3d = { version = "0.3", optional = true }
 
-[features]
-default = []
-avian = ["dep:avian3d"]
-rapier = ["dep:bevy_rapier3d"]
-
-[[example]]
-name = "minimal_avian"
-path = "examples/minimal_avian.rs"
-required-features = ["avian"]
-
-[[example]]
-name = "minimal_rapier"
-path = "examples/minimal_rapier.rs"
-required-features = ["rapier"]
+avian3d = { version = "0.3",}
