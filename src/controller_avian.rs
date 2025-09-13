@@ -95,7 +95,6 @@ pub struct FpsController {
     pub traction_normal_cutoff: f32,
     pub friction_speed_cutoff: f32,
     pub jump_speed: f32,
-    pub fly_speed: f32,
 
     pub height: f32,
     pub upright_height: f32,
@@ -123,7 +122,6 @@ impl Default for FpsController {
         Self {
             grounded_distance: 0.125,
             radius: 0.5,
-            fly_speed: 10.0,
 
             gravity: 23.0,
             walk_speed: 9.0,
@@ -350,51 +348,6 @@ fn scaled_collider_laterally(collider: &Collider, scale: f32) -> Collider {
     } else {
         panic!("Controller must use a cylinder or capsule collider")
     }
-}
-
-fn overhang_component(
-    entity: Entity,
-    collider: &Collider,
-    transform: &Transform,
-    spatial_query: &SpatialQueryPipeline,
-    velocity: Vec3,
-    dt: f32,
-) -> Option<Vec3> {
-    if velocity == Vec3::ZERO {
-        return None;
-    }
-
-    // Cast a segment (zero radius capsule) from our next position back towards us (sweeping a rectangle)
-    // If there is a ledge in front of us we will hit the edge of it
-    // We can use the normal of the hit to subtract off the component that is overhanging
-    let cast_capsule = Collider::capsule(0.01, 0.5);
-    let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
-    let collider_offset = collider_y_offset(collider);
-    let future_position = transform.translation - collider_offset + velocity * dt;
-
-    if let Some(hit) = spatial_query.cast_shape(
-        &cast_capsule,
-        future_position,
-        transform.rotation,
-        Dir3::new_unchecked((-velocity).normalize()),
-        &ShapeCastConfig::from_max_distance(0.5),
-        &filter,
-    ) {
-        let cast = spatial_query.cast_ray(
-            future_position + Vec3::Y * 0.125,
-            Dir3::new_unchecked(-Vec3::Y),
-            0.375,
-            false,
-            &filter,
-        );
-        // Make sure that this is actually a ledge, e.g. there is no ground in front of us
-        if cast.is_none() {
-            let normal = -hit.normal1;
-            let alignment = Vec3::dot(velocity, normal);
-            return Some(alignment * normal);
-        }
-    }
-    None
 }
 
 fn acceleration(
