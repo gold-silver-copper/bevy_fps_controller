@@ -216,15 +216,27 @@ pub fn fps_controller_move(
             &mut Collider,
             &mut Transform,
             &mut LinearVelocity,
+            &mut ExternalForce,
         ),
         With<LogicalPlayer>,
     >,
 ) {
     let dt = time.delta_secs();
 
-    for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
-        query.iter_mut()
+    for (
+        entity,
+        input,
+        mut controller,
+        mut collider,
+        mut transform,
+        mut velocity,
+        mut external_force,
+    ) in query.iter_mut()
     {
+        //  let t_for = transform.forward();
+
+        //  external_force.set_force(t_for.as_vec3());
+
         let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
         let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
         move_to_world.z_axis *= -1.0; // Forward is -Z
