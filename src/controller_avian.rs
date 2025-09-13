@@ -89,11 +89,11 @@ pub struct FpsController {
     pub air_acceleration: f32,
     pub max_air_speed: f32,
     pub acceleration: f32,
-    pub friction: f32,
+
     /// If the dot product (alignment) of the normal of the surface and the upward vector,
     /// which is a value from [-1, 1], is greater than this value, ground movement is applied
     pub traction_normal_cutoff: f32,
-    pub friction_speed_cutoff: f32,
+
     pub jump_speed: f32,
 
     pub height: f32,
@@ -118,7 +118,7 @@ pub struct FpsController {
 impl Default for FpsController {
     fn default() -> Self {
         Self {
-            grounded_distance: 0.125,
+            grounded_distance: 0.001,
             radius: 0.5,
 
             walk_speed: 9.0,
@@ -132,9 +132,8 @@ impl Default for FpsController {
             height: 3.0,
 
             acceleration: 10.0,
-            friction: 10.0,
+
             traction_normal_cutoff: 0.7,
-            friction_speed_cutoff: 0.1,
 
             pitch: 0.0,
             yaw: 0.0,
@@ -255,23 +254,6 @@ pub fn fps_controller_move(
             &filter,
         ) {
             let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
-
-            // Only apply friction after at least one tick, allows b-hopping without losing speed
-            if controller.ground_tick >= 1 && has_traction {
-                let lateral_speed = velocity.0.xz().length();
-                if lateral_speed > controller.friction_speed_cutoff {
-                    let control = f32::max(lateral_speed, controller.stop_speed);
-                    let drop = control * controller.friction * dt;
-                    let new_speed = f32::max((lateral_speed - drop) / lateral_speed, 0.0);
-                    velocity.0.x *= new_speed;
-                    velocity.0.z *= new_speed;
-                } else {
-                    velocity.0 = Vec3::ZERO;
-                }
-                if controller.ground_tick == 1 {
-                    //    velocity.0.y = -hit.distance;
-                }
-            }
 
             let mut add = acceleration(
                 wish_direction,

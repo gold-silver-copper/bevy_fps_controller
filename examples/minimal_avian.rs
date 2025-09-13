@@ -60,9 +60,9 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             // equidistant from the translation of the player transform
             // Collider::capsule(0.5, height),
             Friction {
-                dynamic_coefficient: 0.0,
-                static_coefficient: 0.0,
-                combine_rule: CoefficientCombine::Min,
+                dynamic_coefficient: 0.9,
+                static_coefficient: 0.9,
+                combine_rule: CoefficientCombine::Max,
             },
             Restitution {
                 coefficient: 0.0,
@@ -82,6 +82,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
                 yaw: TAU * 5.0 / 8.0,
                 ..default()
             },
+            LinearDamping(0.8),
             FpsController {
                 air_acceleration: 80.0,
                 ..default()
