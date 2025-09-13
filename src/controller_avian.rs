@@ -78,7 +78,7 @@ pub struct FpsControllerInput {
 #[derive(Component)]
 pub struct FpsController {
     pub radius: f32,
-    pub gravity: f32,
+
     /// If the distance to the ground is less than this value, the player is considered grounded
     pub grounded_distance: f32,
     pub walk_speed: f32,
@@ -121,7 +121,6 @@ impl Default for FpsController {
             grounded_distance: 0.125,
             radius: 0.5,
 
-            gravity: 23.0,
             walk_speed: 9.0,
 
             forward_speed: 30.0,
@@ -270,7 +269,7 @@ pub fn fps_controller_move(
                     velocity.0 = Vec3::ZERO;
                 }
                 if controller.ground_tick == 1 {
-                    velocity.0.y = -hit.distance;
+                    //    velocity.0.y = -hit.distance;
                 }
             }
 
@@ -281,10 +280,9 @@ pub fn fps_controller_move(
                 velocity.0,
                 dt,
             );
-            if !has_traction {
-                add.y -= controller.gravity * dt;
-            }
+
             velocity.0 += add;
+            println!("velocity is : {:#?}", velocity.0);
 
             if has_traction {
                 let linear_velocity = velocity.0;
@@ -308,8 +306,9 @@ pub fn fps_controller_move(
                 velocity.0,
                 dt,
             );
-            add.y = -controller.gravity * dt;
+
             velocity.0 += add;
+            println!("velocity is : {:#?}", velocity.0);
 
             let air_speed = velocity.xz().length();
             if air_speed > controller.max_air_speed {
