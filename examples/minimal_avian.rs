@@ -73,7 +73,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             Sleeping,
             LockedAxes::ROTATION_LOCKED,
             Mass(1.0),
-            GravityScale(0.0),
+            GravityScale(2.0),
             Transform::from_translation(SPAWN_POINT),
             LogicalPlayer,
             FpsControllerInput {

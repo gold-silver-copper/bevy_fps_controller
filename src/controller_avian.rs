@@ -85,7 +85,7 @@ pub struct FpsControllerInput {
 pub struct FpsController {
     pub move_mode: MoveMode,
     pub radius: f32,
-    pub gravity: f32,
+
     /// If the distance to the ground is less than this value, the player is considered grounded
     pub grounded_distance: f32,
     pub walk_speed: f32,
@@ -139,7 +139,7 @@ impl Default for FpsController {
             radius: 0.5,
             fly_speed: 10.0,
             fast_fly_speed: 30.0,
-            gravity: 23.0,
+
             walk_speed: 9.0,
             run_speed: 14.0,
             forward_speed: 30.0,
@@ -254,6 +254,8 @@ pub fn fps_controller_move(
     for (entity, input, mut controller, mut collider, mut transform, mut velocity) in
         query.iter_mut()
     {
+        let mut y_vec = velocity.0.y;
+
         if input.fly {
             controller.move_mode = match controller.move_mode {
                 MoveMode::Noclip => MoveMode::Ground,
@@ -343,7 +345,7 @@ pub fn fps_controller_move(
                         dt,
                     );
                     if !has_traction {
-                        add.y -= controller.gravity * dt;
+                        //   add.y -= controller.gravity * dt;
                     }
                     velocity.0 += add;
 
@@ -352,7 +354,7 @@ pub fn fps_controller_move(
                         velocity.0 -= Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
 
                         if input.jump {
-                            velocity.0.y = controller.jump_speed;
+                            y_vec = controller.jump_speed;
                         }
                     }
 
@@ -369,7 +371,7 @@ pub fn fps_controller_move(
                         velocity.0,
                         dt,
                     );
-                    add.y = -controller.gravity * dt;
+                    //  add.y = -controller.gravity * dt;
                     velocity.0 += add;
 
                     let air_speed = velocity.xz().length();
@@ -470,6 +472,7 @@ pub fn fps_controller_move(
                 }
             }
         }
+        velocity.0.y = y_vec;
     }
 }
 
