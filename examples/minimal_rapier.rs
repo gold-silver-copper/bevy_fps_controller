@@ -1,6 +1,5 @@
 use std::f32::consts::TAU;
 
-use avian3d::prelude::*;
 use bevy::{
     gltf::{Gltf, GltfMesh, GltfNode},
     math::Vec3Swizzles,
@@ -8,6 +7,7 @@ use bevy::{
     render::camera::Exposure,
     window::CursorGrabMode,
 };
+use bevy_rapier3d::prelude::*;
 
 use bevy_fps_controller::controller::*;
 
@@ -22,8 +22,8 @@ fn main() {
         })
         .insert_resource(ClearColor(Color::linear_rgb(0.83, 0.96, 0.96)))
         .add_plugins(DefaultPlugins)
-        .add_plugins(PhysicsPlugins::default())
-        // .add_plugins(PhysicsDebugPlugin::default())
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        // .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins(FpsControllerPlugin)
         .add_systems(Startup, setup)
         .add_systems(
@@ -54,26 +54,27 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     let height = 3.0;
     let logical_entity = commands
         .spawn((
-            Collider::cylinder(0.5, height),
+            Collider::cylinder(height / 2.0, 0.5),
             // A capsule can be used but is NOT recommended
             // If you use it, you have to make sure each segment point is
             // equidistant from the translation of the player transform
-            // Collider::capsule(0.5, height),
+            // Collider::capsule_y(height / 2.0, 0.5),
             Friction {
-                dynamic_coefficient: 0.0,
-                static_coefficient: 0.0,
-                combine_rule: CoefficientCombine::Min,
+                coefficient: 0.0,
+                combine_rule: CoefficientCombineRule::Min,
             },
             Restitution {
                 coefficient: 0.0,
-                combine_rule: CoefficientCombine::Min,
+                combine_rule: CoefficientCombineRule::Min,
             },
-            LinearVelocity::ZERO,
+            ActiveEvents::COLLISION_EVENTS,
+            Velocity::zero(),
             RigidBody::Dynamic,
-            Sleeping,
+            Sleeping::disabled(),
             LockedAxes::ROTATION_LOCKED,
-            Mass(1.0),
+            AdditionalMassProperties::Mass(1.0),
             GravityScale(0.0),
+            Ccd { enabled: true }, // Prevent clipping when going fast
             Transform::from_translation(SPAWN_POINT),
             LogicalPlayer,
             FpsControllerInput {
@@ -123,13 +124,13 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     ));
 }
 
-fn respawn(mut query: Query<(&mut Transform, &mut LinearVelocity)>) {
+fn respawn(mut query: Query<(&mut Transform, &mut Velocity)>) {
     for (mut transform, mut velocity) in &mut query {
         if transform.translation.y > -50.0 {
             continue;
         }
 
-        velocity.0 = Vec3::ZERO;
+        velocity.linvel = Vec3::ZERO;
         transform.translation = SPAWN_POINT;
     }
 }
@@ -164,8 +165,12 @@ fn scene_colliders(
                 for mesh_primitive in &gltf_mesh.primitives {
                     let mesh = mesh_assets.get(&mesh_primitive.mesh).unwrap();
                     commands.spawn((
-                        Collider::trimesh_from_mesh(mesh).unwrap(),
-                        RigidBody::Static,
+                        Collider::from_bevy_mesh(
+                            mesh,
+                            &ComputedColliderShape::TriMesh(TriMeshFlags::all()),
+                        )
+                        .unwrap(),
+                        RigidBody::Fixed,
                         node.transform,
                     ));
                 }
@@ -200,20 +205,20 @@ fn manage_cursor(
 }
 
 fn display_text(
-    mut controller_query: Query<(&Transform, &LinearVelocity), With<LogicalPlayer>>,
+    mut controller_query: Query<(&Transform, &Velocity), With<LogicalPlayer>>,
     mut text_query: Query<&mut Text>,
 ) {
     for (transform, velocity) in &mut controller_query {
         for mut text in &mut text_query {
             text.0 = format!(
                 "vel: {:.2}, {:.2}, {:.2}\npos: {:.2}, {:.2}, {:.2}\nspd: {:.2}",
-                velocity.0.x,
-                velocity.0.y,
-                velocity.0.z,
+                velocity.linvel.x,
+                velocity.linvel.y,
+                velocity.linvel.z,
                 transform.translation.x,
                 transform.translation.y,
                 transform.translation.z,
-                velocity.0.xz().length()
+                velocity.linvel.xz().length()
             );
         }
     }
