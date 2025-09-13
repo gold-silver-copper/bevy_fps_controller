@@ -100,8 +100,7 @@ pub struct FpsController {
 
     pub pitch: f32,
     pub yaw: f32,
-    pub ground_tick: u8,
-    pub stop_speed: f32,
+
     pub sensitivity: f32,
     pub enable_input: bool,
 
@@ -118,7 +117,7 @@ pub struct FpsController {
 impl Default for FpsController {
     fn default() -> Self {
         Self {
-            grounded_distance: 0.001,
+            grounded_distance: 0.01,
             radius: 0.5,
 
             walk_speed: 9.0,
@@ -131,14 +130,13 @@ impl Default for FpsController {
 
             height: 3.0,
 
-            acceleration: 10.0,
+            acceleration: 4.0,
 
             traction_normal_cutoff: 0.7,
 
             pitch: 0.0,
             yaw: 0.0,
-            ground_tick: 0,
-            stop_speed: 1.0,
+
             jump_speed: 8.5,
 
             enable_input: true,
@@ -274,11 +272,7 @@ pub fn fps_controller_move(
                     velocity.0.y = controller.jump_speed;
                 }
             }
-
-            // Increment ground tick but cap at max value
-            controller.ground_tick = controller.ground_tick.saturating_add(1);
         } else {
-            controller.ground_tick = 0;
             wish_speed = f32::min(wish_speed, controller.air_speed_cap);
 
             let mut add = acceleration(

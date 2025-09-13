@@ -82,11 +82,8 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
                 yaw: TAU * 5.0 / 8.0,
                 ..default()
             },
-            LinearDamping(0.8),
-            FpsController {
-                air_acceleration: 80.0,
-                ..default()
-            },
+            LinearDamping(0.4),
+            FpsController::default(),
         ))
         .insert(CameraConfig {
             height_offset: -0.5,
