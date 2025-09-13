@@ -72,7 +72,6 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             RigidBody::Dynamic,
             Sleeping,
             LockedAxes::ROTATION_LOCKED,
-            LinearDamping(0.8),
             Mass(1.0),
             GravityScale(0.0),
             Transform::from_translation(SPAWN_POINT),

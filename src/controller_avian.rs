@@ -97,8 +97,6 @@ pub struct FpsController {
     pub jump_speed: f32,
 
     pub height: f32,
-    pub upright_height: f32,
-    pub crouch_height: f32,
 
     pub pitch: f32,
     pub yaw: f32,
@@ -133,8 +131,7 @@ impl Default for FpsController {
             max_air_speed: 15.0,
 
             height: 3.0,
-            upright_height: 3.0,
-            crouch_height: 1.5,
+
             acceleration: 10.0,
             friction: 10.0,
             traction_normal_cutoff: 0.7,
@@ -243,7 +240,7 @@ pub fn fps_controller_move(
         }
         let max_speed = controller.walk_speed;
         wish_speed = f32::min(wish_speed, max_speed);
-
+        println!("wish dir is {:#?}", wish_direction);
         // Shape cast downwards to find ground
         // Better than a ray cast as it handles when you are near the edge of a surface
         let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
