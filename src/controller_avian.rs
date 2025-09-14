@@ -67,8 +67,6 @@ pub struct CameraConfig {
 
 #[derive(Component, Default)]
 pub struct FpsControllerInput {
-    pub fly: bool,
-    pub sprint: bool,
     pub jump: bool,
     pub crouch: bool,
     pub pitch: f32,
@@ -253,7 +251,7 @@ pub fn fps_controller_move(
         }
         let max_speed = controller.walk_speed;
         wish_speed = f32::min(wish_speed, max_speed);
-        //println!("wish dir is {:#?}", wish_direction);
+
         // Shape cast downwards to find ground
         // Better than a ray cast as it handles when you are near the edge of a surface
         let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
@@ -282,15 +280,12 @@ pub fn fps_controller_move(
             friction.dynamic_coefficient = controller.friction;
             friction.static_coefficient = controller.friction;
             friction.combine_rule = CoefficientCombine::Max;
-            println!("FRICTION HIGH");
+
             if has_traction {
                 let linear_velocity = velocity.0;
 
                 let mut normal_force = Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
-                // normal_force.z = 0.0;
                 velocity.0 -= normal_force;
-
-                //    external_force.apply_impulse(-normal_force);
 
                 if input.jump {
                     // velocity.0.y = controller.jump_speed;
@@ -300,7 +295,6 @@ pub fn fps_controller_move(
                         z: 0.0,
                     };
                     external_force.apply_impulse(jump_force * scale_vec);
-                    println!("FORCE APPLIED")
                 }
             }
         } else {
@@ -308,7 +302,6 @@ pub fn fps_controller_move(
             friction.static_coefficient = 0.1;
             friction.combine_rule = CoefficientCombine::Min;
             wish_speed = f32::min(wish_speed, controller.air_speed_cap);
-            println!("FRICTION LOW");
 
             let add = acceleration(
                 wish_direction,
