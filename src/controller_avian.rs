@@ -101,6 +101,7 @@ pub struct FpsController {
 
     pub pitch: f32,
     pub yaw: f32,
+    pub friction: f32,
 
     pub sensitivity: f32,
     pub enable_input: bool,
@@ -134,6 +135,7 @@ impl Default for FpsController {
             acceleration: 4.0,
 
             traction_normal_cutoff: 0.7,
+            friction: 0.9,
 
             pitch: 0.0,
             yaw: 0.0,
@@ -207,7 +209,6 @@ pub fn fps_controller_look(mut query: Query<(&mut FpsController, &FpsControllerI
 }
 
 pub fn fps_controller_move(
-    time: Res<Time>,
     spatial_query_pipeline: Res<SpatialQueryPipeline>,
     mut query: Query<
         (
@@ -218,6 +219,7 @@ pub fn fps_controller_move(
             &mut Transform,
             &mut LinearVelocity,
             &mut ExternalImpulse,
+            &mut Friction,
         ),
         With<LogicalPlayer>,
     >,
@@ -232,6 +234,7 @@ pub fn fps_controller_move(
         mut transform,
         mut velocity,
         mut external_force,
+        mut friction,
     ) in query.iter_mut()
     {
         //  let t_for = transform.forward();
@@ -273,6 +276,9 @@ pub fn fps_controller_move(
             );
             println!("add is : {:#?}", add);
             external_force.apply_impulse(add);
+            friction.dynamic_coefficient = controller.friction;
+            friction.static_coefficient = controller.friction;
+            friction.combine_rule = CoefficientCombine::Max;
 
             if has_traction {
                 let linear_velocity = velocity.0;
@@ -290,6 +296,9 @@ pub fn fps_controller_move(
                 }
             }
         } else {
+            friction.dynamic_coefficient = 0.0;
+            friction.static_coefficient = 0.0;
+            friction.combine_rule = CoefficientCombine::Min;
             wish_speed = f32::min(wish_speed, controller.air_speed_cap);
 
             let add = acceleration(
@@ -301,13 +310,6 @@ pub fn fps_controller_move(
             );
             println!("add is : {:#?}", add);
             external_force.apply_impulse(add);
-
-            let air_speed = velocity.xz().length();
-            if air_speed > controller.max_air_speed {
-                let ratio = controller.max_air_speed / air_speed;
-                velocity.0.x *= ratio;
-                velocity.0.z *= ratio;
-            }
         };
     }
 }
