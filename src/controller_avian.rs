@@ -264,7 +264,7 @@ pub fn fps_controller_move(
         ) {
             let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
-            let mut add = acceleration(
+            let add = acceleration(
                 wish_direction,
                 wish_speed,
                 controller.acceleration,
@@ -272,8 +272,7 @@ pub fn fps_controller_move(
                 dt,
             );
             println!("add is : {:#?}", add);
-            velocity.0 += add;
-            //   println!("velocity is : {:#?}", velocity.0);
+            external_force.apply_impulse(add);
 
             if has_traction {
                 let linear_velocity = velocity.0;
@@ -293,7 +292,7 @@ pub fn fps_controller_move(
         } else {
             wish_speed = f32::min(wish_speed, controller.air_speed_cap);
 
-            let mut add = acceleration(
+            let add = acceleration(
                 wish_direction,
                 wish_speed,
                 controller.air_acceleration,
@@ -301,7 +300,7 @@ pub fn fps_controller_move(
                 dt,
             );
             println!("add is : {:#?}", add);
-            velocity.0 += add;
+            external_force.apply_impulse(add);
 
             let air_speed = velocity.xz().length();
             if air_speed > controller.max_air_speed {
