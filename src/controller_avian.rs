@@ -95,8 +95,8 @@ pub struct FpsController {
     pub traction_normal_cutoff: f32,
 
     pub height: f32,
-    pub first_ground_contact: bool,
-    pub just_jumped: bool,
+    pub ground_tick: u8,
+    pub jump_tick: u8,
     pub pitch: f32,
     pub yaw: f32,
     pub friction: f32,
@@ -111,7 +111,7 @@ pub struct FpsController {
     pub key_right: KeyCode,
     pub key_up: KeyCode,
     pub key_down: KeyCode,
-    pub ground_tick: u8,
+
     pub key_jump: KeyCode,
 }
 
@@ -129,9 +129,9 @@ impl Default for FpsController {
             air_speed_cap: 2.0,
 
             air_acceleration: 10.0,
-            first_ground_contact: false,
-            just_jumped: false,
+
             ground_tick: 0,
+            jump_tick: 0,
             height: 1.8,
 
             acceleration: 3.5,
@@ -295,25 +295,25 @@ pub fn fps_controller_move(
                     velocity.0 -= normal_force;
                 }
 
-                if input.jump && controller.ground_tick > 1 {
+                if input.jump && controller.jump_tick > 0 {
                     let jump_force = Vec3 {
                         x: 0.0,
                         y: 6.0,
                         z: 0.0,
                     };
                     external_force.apply_impulse(jump_force * scale_vec);
-                    controller.ground_tick = 0;
+                    controller.jump_tick = 0;
 
                     println!("JUMPED");
+                } else {
+                    controller.jump_tick = controller.jump_tick.saturating_add(1);
                 }
             }
             controller.ground_tick = controller.ground_tick.saturating_add(1);
         } else {
             controller.ground_tick = 0;
             damping.0 = 0.3;
-            //   println!("NOT ON GROUND");
 
-            controller.first_ground_contact = true;
             friction.dynamic_coefficient = 0.1;
             friction.static_coefficient = 0.1;
             friction.combine_rule = CoefficientCombine::Min;
