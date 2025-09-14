@@ -28,7 +28,7 @@ use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
 /// fn my_system() { }
 /// ```
 pub struct FpsControllerPlugin;
-pub static FPS: f64 = 120.0;
+pub static FPS: f64 = 80.0;
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
         use bevy::input::{gamepad, keyboard, mouse, touch};
@@ -85,7 +85,7 @@ pub struct FpsController {
     pub forward_speed: f32,
     pub side_speed: f32,
     pub air_speed_cap: f32,
-    pub ground_speed_cap: f32,
+
     pub air_acceleration: f32,
 
     pub acceleration: f32,
@@ -98,6 +98,7 @@ pub struct FpsController {
 
     pub height: f32,
     pub first_ground_contact: bool,
+    pub just_jumped: bool,
     pub pitch: f32,
     pub yaw: f32,
     pub friction: f32,
@@ -119,7 +120,7 @@ pub struct FpsController {
 impl Default for FpsController {
     fn default() -> Self {
         Self {
-            grounded_distance: 0.03,
+            grounded_distance: 0.04,
             radius: 0.25,
 
             walk_speed: 8.0,
@@ -128,15 +129,16 @@ impl Default for FpsController {
             forward_speed: 30.0,
             side_speed: 30.0,
             air_speed_cap: 2.0,
-            ground_speed_cap: 5.0,
+
             air_acceleration: 20.0,
             first_ground_contact: false,
+            just_jumped: false,
 
             height: 1.8,
 
-            acceleration: 4.0,
+            acceleration: 2.5,
 
-            traction_normal_cutoff: 0.8,
+            traction_normal_cutoff: 0.6,
             friction: 0.99,
 
             pitch: 0.0,
@@ -268,7 +270,7 @@ pub fn fps_controller_move(
             &filter,
         ) {
             let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
-            //  wish_speed = f32::min(wish_speed, controller.ground_speed_cap);
+
             let add = acceleration(
                 wish_direction,
                 wish_speed,
@@ -291,7 +293,7 @@ pub fn fps_controller_move(
                     velocity.0 -= normal_force;
                     controller.first_ground_contact = false;
                 }
-
+                //&& !controller.just_jumped
                 if input.jump {
                     let jump_force = Vec3 {
                         x: 0.0,
@@ -299,6 +301,7 @@ pub fn fps_controller_move(
                         z: 0.0,
                     };
                     external_force.apply_impulse(jump_force * scale_vec);
+                    println!("JUMPED");
                 }
             }
         } else {

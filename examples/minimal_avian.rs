@@ -84,7 +84,7 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
                 yaw: TAU * 5.0 / 8.0,
                 ..default()
             },
-            LinearDamping(0.7),
+            LinearDamping(0.4),
             FpsController {
                 radius,
                 height,
