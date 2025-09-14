@@ -97,7 +97,7 @@ pub struct FpsController {
     pub jump_speed: f32,
 
     pub height: f32,
-
+    pub first_ground_contact: bool,
     pub pitch: f32,
     pub yaw: f32,
     pub friction: f32,
@@ -130,6 +130,7 @@ impl Default for FpsController {
             air_speed_cap: 2.0,
             ground_speed_cap: 5.0,
             air_acceleration: 20.0,
+            first_ground_contact: false,
 
             height: 1.8,
 
@@ -282,13 +283,16 @@ pub fn fps_controller_move(
             friction.combine_rule = CoefficientCombine::Max;
 
             if has_traction {
-                let linear_velocity = velocity.0;
+                if controller.first_ground_contact {
+                    let linear_velocity = velocity.0;
 
-                let mut normal_force = Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
-                velocity.0 -= normal_force;
+                    let normal_force = Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
+
+                    velocity.0 -= normal_force;
+                    controller.first_ground_contact = false;
+                }
 
                 if input.jump {
-                    // velocity.0.y = controller.jump_speed;
                     let jump_force = Vec3 {
                         x: 0.0,
                         y: 5.0,
@@ -298,6 +302,7 @@ pub fn fps_controller_move(
                 }
             }
         } else {
+            controller.first_ground_contact = true;
             friction.dynamic_coefficient = 0.1;
             friction.static_coefficient = 0.1;
             friction.combine_rule = CoefficientCombine::Min;
