@@ -28,26 +28,27 @@ use bevy::{input::mouse::MouseMotion, math::Vec3Swizzles, prelude::*};
 /// fn my_system() { }
 /// ```
 pub struct FpsControllerPlugin;
-
+pub static FPS: f64 = 120.0;
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
         use bevy::input::{gamepad, keyboard, mouse, touch};
 
-        app.add_systems(
-            PreUpdate,
-            (
-                fps_controller_input,
-                fps_controller_look,
-                fps_controller_move,
-                fps_controller_render,
+        app.insert_resource(Time::<Fixed>::from_hz(FPS))
+            .add_systems(
+                PreUpdate,
+                (
+                    fps_controller_input,
+                    fps_controller_look,
+                    fps_controller_render,
+                )
+                    .chain()
+                    .after(mouse::mouse_button_input_system)
+                    .after(keyboard::keyboard_input_system)
+                    .after(gamepad::gamepad_event_processing_system)
+                    .after(gamepad::gamepad_connection_system)
+                    .after(touch::touch_screen_input_system),
             )
-                .chain()
-                .after(mouse::mouse_button_input_system)
-                .after(keyboard::keyboard_input_system)
-                .after(gamepad::gamepad_event_processing_system)
-                .after(gamepad::gamepad_connection_system)
-                .after(touch::touch_screen_input_system),
-        );
+            .add_systems(FixedUpdate, fps_controller_move);
     }
 }
 
@@ -117,7 +118,7 @@ pub struct FpsController {
 impl Default for FpsController {
     fn default() -> Self {
         Self {
-            grounded_distance: 0.01,
+            grounded_distance: 0.05,
             radius: 0.5,
 
             walk_speed: 9.0,
@@ -137,7 +138,7 @@ impl Default for FpsController {
             pitch: 0.0,
             yaw: 0.0,
 
-            jump_speed: 8.5,
+            jump_speed: 10.0,
 
             enable_input: true,
             key_forward: KeyCode::KeyW,
@@ -221,7 +222,7 @@ pub fn fps_controller_move(
         With<LogicalPlayer>,
     >,
 ) {
-    let dt = time.delta_secs();
+    let dt = 1.0 / FPS as f32;
 
     for (
         entity,
@@ -246,7 +247,7 @@ pub fn fps_controller_move(
         }
         let max_speed = controller.walk_speed;
         wish_speed = f32::min(wish_speed, max_speed);
-        println!("wish dir is {:#?}", wish_direction);
+        //println!("wish dir is {:#?}", wish_direction);
         // Shape cast downwards to find ground
         // Better than a ray cast as it handles when you are near the edge of a surface
         let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
@@ -270,9 +271,9 @@ pub fn fps_controller_move(
                 velocity.0,
                 dt,
             );
-
+            println!("add is : {:#?}", add);
             velocity.0 += add;
-            println!("velocity is : {:#?}", velocity.0);
+            //   println!("velocity is : {:#?}", velocity.0);
 
             if has_traction {
                 let linear_velocity = velocity.0;
@@ -282,10 +283,11 @@ pub fn fps_controller_move(
                     // velocity.0.y = controller.jump_speed;
                     let force = Vec3 {
                         x: 0.0,
-                        y: 10.0,
+                        y: controller.jump_speed,
                         z: 0.0,
                     };
                     external_force.apply_impulse(force);
+                    println!("FORCE APPLIED")
                 }
             }
         } else {
@@ -298,9 +300,8 @@ pub fn fps_controller_move(
                 velocity.0,
                 dt,
             );
-
+            println!("add is : {:#?}", add);
             velocity.0 += add;
-            println!("velocity is : {:#?}", velocity.0);
 
             let air_speed = velocity.xz().length();
             if air_speed > controller.max_air_speed {
