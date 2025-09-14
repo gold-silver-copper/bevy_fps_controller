@@ -216,7 +216,7 @@ pub fn fps_controller_move(
             &mut Collider,
             &mut Transform,
             &mut LinearVelocity,
-            &mut ExternalForce,
+            &mut ExternalImpulse,
         ),
         With<LogicalPlayer>,
     >,
@@ -234,8 +234,6 @@ pub fn fps_controller_move(
     ) in query.iter_mut()
     {
         //  let t_for = transform.forward();
-
-        //  external_force.set_force(t_for.as_vec3());
 
         let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
         let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
@@ -281,7 +279,13 @@ pub fn fps_controller_move(
                 velocity.0 -= Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
 
                 if input.jump {
-                    velocity.0.y = controller.jump_speed;
+                    // velocity.0.y = controller.jump_speed;
+                    let force = Vec3 {
+                        x: 0.0,
+                        y: 10.0,
+                        z: 0.0,
+                    };
+                    external_force.apply_impulse(force);
                 }
             }
         } else {
