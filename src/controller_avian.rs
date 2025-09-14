@@ -123,7 +123,7 @@ impl Default for FpsController {
             grounded_distance: 0.04,
             radius: 0.25,
 
-            walk_speed: 8.0,
+            walk_speed: 7.0,
             mass: 80.0,
 
             forward_speed: 30.0,
@@ -136,10 +136,10 @@ impl Default for FpsController {
 
             height: 1.8,
 
-            acceleration: 2.5,
+            acceleration: 3.0,
 
             traction_normal_cutoff: 0.6,
-            friction: 0.99,
+            friction: 0.9,
 
             pitch: 0.0,
             yaw: 0.0,
@@ -258,6 +258,7 @@ pub fn fps_controller_move(
         // Shape cast downwards to find ground
         // Better than a ray cast as it handles when you are near the edge of a surface
         let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
+
         if let Some(hit) = spatial_query_pipeline.cast_shape(
             // Consider when the controller is right up against a wall
             // We do not want the shape cast to detect it,
@@ -271,20 +272,21 @@ pub fn fps_controller_move(
         ) {
             let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
 
-            let add = acceleration(
-                wish_direction,
-                wish_speed,
-                controller.acceleration,
-                velocity.0,
-                dt,
-            );
-
-            external_force.apply_impulse(add * scale_vec);
             friction.dynamic_coefficient = controller.friction;
             friction.static_coefficient = controller.friction;
             friction.combine_rule = CoefficientCombine::Max;
 
             if has_traction {
+                let slope_wish_dir =
+                    wish_direction - hit.normal1 * Vec3::dot(wish_direction, hit.normal1);
+                let add = acceleration(
+                    slope_wish_dir,
+                    wish_speed,
+                    controller.acceleration,
+                    velocity.0,
+                    dt,
+                );
+                external_force.apply_impulse(add * scale_vec);
                 if controller.first_ground_contact {
                     let linear_velocity = velocity.0;
 
@@ -294,17 +296,28 @@ pub fn fps_controller_move(
                     controller.first_ground_contact = false;
                 }
                 //&& !controller.just_jumped
-                if input.jump {
+                if input.jump && !controller.just_jumped {
                     let jump_force = Vec3 {
                         x: 0.0,
                         y: 5.0,
                         z: 0.0,
                     };
                     external_force.apply_impulse(jump_force * scale_vec);
+                    controller.just_jumped = true;
                     println!("JUMPED");
                 }
+            } else {
+                let add = acceleration(
+                    wish_direction,
+                    wish_speed,
+                    controller.acceleration,
+                    velocity.0,
+                    dt,
+                );
+                external_force.apply_impulse(add * scale_vec);
             }
         } else {
+            controller.just_jumped = false;
             controller.first_ground_contact = true;
             friction.dynamic_coefficient = 0.1;
             friction.static_coefficient = 0.1;
