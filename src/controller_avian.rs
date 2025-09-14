@@ -94,8 +94,6 @@ pub struct FpsController {
     /// which is a value from [-1, 1], is greater than this value, ground movement is applied
     pub traction_normal_cutoff: f32,
 
-    pub jump_speed: f32,
-
     pub height: f32,
     pub first_ground_contact: bool,
     pub just_jumped: bool,
@@ -113,7 +111,7 @@ pub struct FpsController {
     pub key_right: KeyCode,
     pub key_up: KeyCode,
     pub key_down: KeyCode,
-
+    pub ground_tick: u8,
     pub key_jump: KeyCode,
 }
 
@@ -130,21 +128,19 @@ impl Default for FpsController {
             side_speed: 30.0,
             air_speed_cap: 2.0,
 
-            air_acceleration: 20.0,
+            air_acceleration: 10.0,
             first_ground_contact: false,
             just_jumped: false,
-
+            ground_tick: 0,
             height: 1.8,
 
-            acceleration: 3.0,
+            acceleration: 3.5,
 
             traction_normal_cutoff: 0.6,
-            friction: 0.9,
+            friction: 0.99,
 
             pitch: 0.0,
             yaw: 0.0,
-
-            jump_speed: 400.0,
 
             enable_input: true,
             key_forward: KeyCode::KeyW,
@@ -224,6 +220,7 @@ pub fn fps_controller_move(
             &mut LinearVelocity,
             &mut ExternalImpulse,
             &mut Friction,
+            &mut LinearDamping,
         ),
         With<LogicalPlayer>,
     >,
@@ -239,6 +236,7 @@ pub fn fps_controller_move(
         mut velocity,
         mut external_force,
         mut friction,
+        mut damping,
     ) in query.iter_mut()
     {
         let scale_vec = Vec3::splat(controller.mass);
@@ -270,59 +268,57 @@ pub fn fps_controller_move(
             &ShapeCastConfig::from_max_distance(controller.grounded_distance),
             &filter,
         ) {
+            damping.0 = 0.99;
             let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
+            //  println!("ON GROUND");
+            let slope_wish_dir =
+                wish_direction - hit.normal1 * Vec3::dot(wish_direction, hit.normal1);
+            let add = acceleration(
+                slope_wish_dir,
+                wish_speed,
+                controller.acceleration,
+                velocity.0,
+                dt,
+            );
 
+            external_force.apply_impulse(add * scale_vec);
             friction.dynamic_coefficient = controller.friction;
             friction.static_coefficient = controller.friction;
             friction.combine_rule = CoefficientCombine::Max;
 
             if has_traction {
-                let slope_wish_dir =
-                    wish_direction - hit.normal1 * Vec3::dot(wish_direction, hit.normal1);
-                let add = acceleration(
-                    slope_wish_dir,
-                    wish_speed,
-                    controller.acceleration,
-                    velocity.0,
-                    dt,
-                );
-                external_force.apply_impulse(add * scale_vec);
-                if controller.first_ground_contact {
+                if controller.ground_tick == 0 {
                     let linear_velocity = velocity.0;
 
                     let normal_force = Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
 
                     velocity.0 -= normal_force;
-                    controller.first_ground_contact = false;
                 }
-                //&& !controller.just_jumped
-                if input.jump && !controller.just_jumped {
+
+                if input.jump && controller.ground_tick > 1 {
                     let jump_force = Vec3 {
                         x: 0.0,
-                        y: 5.0,
+                        y: 6.0,
                         z: 0.0,
                     };
                     external_force.apply_impulse(jump_force * scale_vec);
-                    controller.just_jumped = true;
+                    controller.ground_tick = 0;
+
                     println!("JUMPED");
                 }
-            } else {
-                let add = acceleration(
-                    wish_direction,
-                    wish_speed,
-                    controller.acceleration,
-                    velocity.0,
-                    dt,
-                );
-                external_force.apply_impulse(add * scale_vec);
             }
+            controller.ground_tick = controller.ground_tick.saturating_add(1);
         } else {
-            controller.just_jumped = false;
+            controller.ground_tick = 0;
+            damping.0 = 0.3;
+            //   println!("NOT ON GROUND");
+
             controller.first_ground_contact = true;
             friction.dynamic_coefficient = 0.1;
             friction.static_coefficient = 0.1;
             friction.combine_rule = CoefficientCombine::Min;
             wish_speed = f32::min(wish_speed, controller.air_speed_cap);
+            //   println!("WISH DIR IS {:#?}", wish_direction);
 
             let add = acceleration(
                 wish_direction,
@@ -331,7 +327,7 @@ pub fn fps_controller_move(
                 velocity.0,
                 dt,
             );
-
+            //  println!("ADD IS {:#?}", add);
             external_force.apply_impulse(add * scale_vec);
         };
     }
