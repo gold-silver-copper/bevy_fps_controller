@@ -87,8 +87,9 @@ pub struct FpsController {
     pub forward_speed: f32,
     pub side_speed: f32,
     pub air_speed_cap: f32,
+    pub ground_speed_cap: f32,
     pub air_acceleration: f32,
-    pub max_air_speed: f32,
+
     pub acceleration: f32,
 
     /// If the dot product (alignment) of the normal of the surface and the upward vector,
@@ -102,6 +103,7 @@ pub struct FpsController {
     pub pitch: f32,
     pub yaw: f32,
     pub friction: f32,
+    pub mass: f32,
 
     pub sensitivity: f32,
     pub enable_input: bool,
@@ -119,28 +121,29 @@ pub struct FpsController {
 impl Default for FpsController {
     fn default() -> Self {
         Self {
-            grounded_distance: 0.05,
-            radius: 0.5,
+            grounded_distance: 0.03,
+            radius: 0.25,
 
-            walk_speed: 9.0,
+            walk_speed: 8.0,
+            mass: 80.0,
 
             forward_speed: 30.0,
             side_speed: 30.0,
             air_speed_cap: 2.0,
+            ground_speed_cap: 5.0,
             air_acceleration: 20.0,
-            max_air_speed: 15.0,
 
-            height: 3.0,
+            height: 1.8,
 
             acceleration: 4.0,
 
-            traction_normal_cutoff: 0.7,
-            friction: 0.9,
+            traction_normal_cutoff: 0.8,
+            friction: 0.99,
 
             pitch: 0.0,
             yaw: 0.0,
 
-            jump_speed: 10.0,
+            jump_speed: 400.0,
 
             enable_input: true,
             key_forward: KeyCode::KeyW,
@@ -167,7 +170,7 @@ impl Default for FpsController {
 // Used as padding by camera pitching (up/down) to avoid spooky math problems
 const ANGLE_EPSILON: f32 = 0.001953125;
 
-const SLIGHT_SCALE_DOWN: f32 = 0.9375;
+const SLIGHT_SCALE_DOWN: f32 = 0.6;
 
 pub fn fps_controller_input(
     key_input: Res<ButtonInput<KeyCode>>,
@@ -237,7 +240,7 @@ pub fn fps_controller_move(
         mut friction,
     ) in query.iter_mut()
     {
-        //  let t_for = transform.forward();
+        let scale_vec = Vec3::splat(controller.mass);
 
         let speeds = Vec3::new(controller.side_speed, 0.0, controller.forward_speed);
         let mut move_to_world = Mat3::from_axis_angle(Vec3::Y, input.yaw);
@@ -266,7 +269,7 @@ pub fn fps_controller_move(
             &filter,
         ) {
             let has_traction = Vec3::dot(hit.normal1, Vec3::Y) > controller.traction_normal_cutoff;
-
+            //  wish_speed = f32::min(wish_speed, controller.ground_speed_cap);
             let add = acceleration(
                 wish_direction,
                 wish_speed,
@@ -274,32 +277,38 @@ pub fn fps_controller_move(
                 velocity.0,
                 dt,
             );
-            println!("add is : {:#?}", add);
-            external_force.apply_impulse(add);
+
+            external_force.apply_impulse(add * scale_vec);
             friction.dynamic_coefficient = controller.friction;
             friction.static_coefficient = controller.friction;
             friction.combine_rule = CoefficientCombine::Max;
-
+            println!("FRICTION HIGH");
             if has_traction {
                 let linear_velocity = velocity.0;
-                velocity.0 -= Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
+
+                let mut normal_force = Vec3::dot(linear_velocity, hit.normal1) * hit.normal1;
+                // normal_force.z = 0.0;
+                velocity.0 -= normal_force;
+
+                //    external_force.apply_impulse(-normal_force);
 
                 if input.jump {
                     // velocity.0.y = controller.jump_speed;
-                    let force = Vec3 {
+                    let jump_force = Vec3 {
                         x: 0.0,
-                        y: controller.jump_speed,
+                        y: 5.0,
                         z: 0.0,
                     };
-                    external_force.apply_impulse(force);
+                    external_force.apply_impulse(jump_force * scale_vec);
                     println!("FORCE APPLIED")
                 }
             }
         } else {
-            friction.dynamic_coefficient = 0.0;
-            friction.static_coefficient = 0.0;
+            friction.dynamic_coefficient = 0.1;
+            friction.static_coefficient = 0.1;
             friction.combine_rule = CoefficientCombine::Min;
             wish_speed = f32::min(wish_speed, controller.air_speed_cap);
+            println!("FRICTION LOW");
 
             let add = acceleration(
                 wish_direction,
@@ -308,8 +317,8 @@ pub fn fps_controller_move(
                 velocity.0,
                 dt,
             );
-            println!("add is : {:#?}", add);
-            external_force.apply_impulse(add);
+
+            external_force.apply_impulse(add * scale_vec);
         };
     }
 }

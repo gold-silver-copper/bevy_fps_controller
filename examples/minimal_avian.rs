@@ -22,7 +22,7 @@ fn main() {
         })
         .insert_resource(ClearColor(Color::linear_rgb(0.83, 0.96, 0.96)))
         .add_plugins(DefaultPlugins)
-        .add_plugins(PhysicsPlugins::default())
+        .add_plugins(PhysicsPlugins::new(FixedPostUpdate))
         // .add_plugins(PhysicsDebugPlugin::default())
         .add_plugins(FpsControllerPlugin)
         .add_systems(Startup, setup)
@@ -51,10 +51,12 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
     // The other is a "render" player that is what is displayed to the user
     // This distinction is useful for later on if you want to add multiplayer,
     // where often time these two ideas are not exactly synced up
-    let height = 3.0;
+    let height = 1.8;
+    let radius = 0.25;
+    let mass = 80.0;
     let logical_entity = commands
         .spawn((
-            Collider::cylinder(0.5, height),
+            Collider::cylinder(radius, height),
             // A capsule can be used but is NOT recommended
             // If you use it, you have to make sure each segment point is
             // equidistant from the translation of the player transform
@@ -73,8 +75,8 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
             RigidBody::Dynamic,
             Sleeping,
             LockedAxes::ROTATION_LOCKED,
-            Mass(1.0),
-            GravityScale(2.0),
+            Mass(mass),
+            GravityScale(1.0),
             Transform::from_translation(SPAWN_POINT),
             LogicalPlayer,
             FpsControllerInput {
@@ -82,11 +84,17 @@ fn setup(mut commands: Commands, mut window: Query<&mut Window>, assets: Res<Ass
                 yaw: TAU * 5.0 / 8.0,
                 ..default()
             },
-            LinearDamping(0.4),
-            FpsController::default(),
+            LinearDamping(0.3),
+            FpsController {
+                radius,
+                height,
+                mass,
+
+                ..default()
+            },
         ))
         .insert(CameraConfig {
-            height_offset: -0.5,
+            height_offset: -0.2,
         })
         .id();
 
